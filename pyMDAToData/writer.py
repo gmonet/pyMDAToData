@@ -2,9 +2,10 @@ from pathlib import Path
 import MDAnalysis as mda
 import numpy as np
 
-def MDAToData(u, ouputPath):
+
+def MDAToData(u, ouputPath, center=True):
     '''
-    
+
     Example:
     >>> u = mda.Universe.empty( ...
     >>> bonds = mda.topology.guessers.guess_bonds(u.atoms, u.atoms.positions)
@@ -18,65 +19,92 @@ def MDAToData(u, ouputPath):
         f.write("\n")
 
         f.write(f"{len(u.atoms)} atoms\n")
-        f.write(f"{len(u.bonds)} bonds\n")
-        f.write(f"{len(u.angles)} angles\n")
-        f.write(f"{len(u.dihedrals)} dihedrals\n")
-        f.write(f"{len(u.impropers)} impropers\n")
+        dic_n = {}
+        for key in ['bonds', 'angles', 'dihedrals', 'impropers']:
+            try:
+                n = len(getattr(u, key))
+            except:
+                n = 0
+            f.write(f"{n} {key}\n")
+            dic_n[key] = n
         f.write("\n")
 
         n_types = len(np.unique(u.atoms.types))
         f.write(f"{n_types} atom types\n")
-        n_bonds = len(u.bonds.types())
-        f.write(f"{n_bonds} bond types\n")
-        n_angles = len(u.angles.types())
-        f.write(f"{n_angles} angle types\n")
-        n_dihedrals = len(u.dihedrals.types())
-        f.write(f"{n_dihedrals} dihedral types\n")
-        n_impropers = len(u.impropers.types())
-        f.write(f"{n_impropers} improper types\n")
+        for key in ['bonds', 'angles', 'dihedrals', 'impropers']:
+            try:
+                n_types = len(getattr(u, key).types())
+            except:
+                n_types = 0
+            f.write(f"{n_types} {key[:-1]} types\n")
         f.write("\n")
 
-        xlo, ylo, zlo = u.atoms.positions.min(axis=0)
-        xhi, yhi, zhi = u.dimensions[:3]+u.atoms.positions.min(axis=0)
+        if center:
+            xlo, ylo, zlo = u.atoms.positions.min(axis=0)
+            xhi, yhi, zhi = u.dimensions[:3]+u.atoms.positions.min(axis=0)
+        else:
+            xlo, ylo, zlo = 0., 0., 0.
+            xhi, yhi, zhi = u.dimensions[:3]
         f.write(f"{xlo:.6f} {xhi:.6f} xlo xhi\n")
         f.write(f"{ylo:.6f} {yhi:.6f} ylo yhi\n")
         f.write(f"{zlo:.6f} {zhi:.6f} zlo zhi\n")
         f.write("\n")
 
         f.write("Atoms\n\n")
-        types_id = np.unique(u.atoms.types, return_inverse=True)[1]
+        uniques_id = list(np.unique(u.atoms.types))
+        types_id={}
+        index = 1
+        if 'H' in uniques_id:
+            types_id['H'] = index 
+            uniques_id.remove('H')
+            index += 1
+        if 'O' in uniques_id:
+            types_id['O'] = index
+            uniques_id.remove('O')
+            index += 1
+        for unique_id in uniques_id:
+            types_id[unique_id] = index
+            index += 1
         for i, atom in enumerate(u.atoms):
             x, y, z = atom.position
-            f.write(f"  {i+1} {atom.resid} {types_id[i]} {x:.8f} {y:.8f} {z:.8f}\n")
+            n = atom.type
+            charge = atom.charge
+            f.write(
+                f"  {i+1} {atom.resid} {types_id[n]} {charge:.8f} {x:.8f} {y:.8f} {z:.8f}\n")
 
-        if n_bonds!=0:
+        if dic_n['bonds'] != 0:
             f.write("\n")
             f.write("Bonds\n\n")
-            types_id = dict(zip(u.bonds.types(), range(n_bonds)))
+            types_id = dict(zip(u.bonds.types(), np.arange(dic_n['bonds'])+1))
             for i, bond in enumerate(u.bonds):
-                i1, i2 = bond.indices
+                i1, i2 = bond.indices + 1
                 f.write(f"  {i+1} {types_id[bond.type]} {i1} {i2}\n")
 
-        if n_angles!=0:
+        if dic_n['angles'] != 0:
             f.write("\n")
             f.write("Angles\n\n")
-            types_id = dict(zip(u.angles.types(), range(n_angles)))
+            types_id = dict(
+                zip(u.angles.types(), np.arange(dic_n['angles'])+1))
             for i, angle in enumerate(u.angles):
-                i1, i2, i3 = angle.indices
+                i1, i2, i3 = angle.indices + 1
                 f.write(f"  {i+1} {types_id[angle.type]} {i1} {i2} {i3}\n")
 
-        if n_dihedrals!=0:
+        if dic_n['dihedrals'] != 0:
             f.write("\n")
             f.write("Dihedrals\n\n")
-            types_id = dict(zip(u.dihedrals.types(), range(n_dihedrals)))
+            types_id = dict(
+                zip(u.dihedrals.types(), np.arange(dic_n['dihedrals'])+1))
             for i, dihedral in enumerate(u.dihedrals):
-                i1, i2, i3, i4 = dihedral.indices
-                f.write(f"  {i+1} {types_id[dihedral.type]} {i1} {i2} {i3} {i4}\n")
+                i1, i2, i3, i4 = dihedral.indices + 1
+                f.write(
+                    f"  {i+1} {types_id[dihedral.type]} {i1} {i2} {i3} {i4}\n")
 
-        if n_impropers!=0:
+        if dic_n['impropers'] != 0:
             f.write("\n")
             f.write("Impropers\n\n")
-            types_id = dict(zip(u.impropers.types(), range(n_impropers)))
+            types_id = dict(
+                zip(u.impropers.types(), np.arange(dic_n['impropers'])+1))
             for i, improper in enumerate(u.impropers):
-                i1, i2, i3, i4 = improper.indices
-                f.write(f"  {i+1} {types_id[improper.type]} {i1} {i2} {i3} {i4}\n")
+                i1, i2, i3, i4 = improper.indices + 1
+                f.write(
+                    f"  {i+1} {types_id[improper.type]} {i1} {i2} {i3} {i4}\n")
